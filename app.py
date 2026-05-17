@@ -82,12 +82,12 @@ def reset():
 @app.route("/status", methods=["GET"])
 def status():
     return jsonify({
-        "server":           "running",
-        "frames_processed": detector.frames_processed,
-        "current_status":   detector.status,
-        "total_eye_alerts": detector.total_eye_alerts,
-        "total_yawn_alerts": detector.total_yawn_alerts,
-        "total_nod_alerts": detector.total_nod_alerts,
+        "server":            "running",
+        "frames_processed":  detector.frames,
+        "current_status":    detector.status,
+        "total_eye_alerts":  detector.eye_alerts,
+        "total_yawn_alerts": detector.yawn_alerts,
+        "total_nod_alerts":  detector.nod_alerts,
     })
 
 
@@ -102,4 +102,6 @@ if __name__ == "__main__":
     print("  Detector     : http://localhost:5000/detect.html")
     print("  API status   : http://localhost:5000/status")
     print("==========================================\n")
-    app.run(host="0.0.0.0", port=5000, debug=True)
+    #app.run(host="0.0.0.0", port=5000, debug=True)
+    port = int(os.environ.get("PORT", 5000))
+    app.run(host="0.0.0.0", port=port)
