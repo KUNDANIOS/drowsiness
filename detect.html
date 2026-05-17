@@ -1,0 +1,911 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+<title>DrowseGuard — Live Detector</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Outfit:wght@300;400;500;600;700;800&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
+<style>
+*, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+:root {
+  --bg:#09090b; --bg2:#0f0f12; --bg3:#141418; --sur:#1a1a20;
+  --b:rgba(255,255,255,0.06); --b2:rgba(255,255,255,0.11);
+  --text:#f0f0f4; --muted:#71717a; --m2:#a1a1aa;
+  --acc:#e85d04; --acc2:#f48c06;
+  --adim:rgba(232,93,4,0.12);
+  --green:#16a34a; --gdim:rgba(22,163,74,0.12);
+  --red:#dc2626; --rdim:rgba(220,38,38,0.1);
+  --amber:#d97706; --purple:#7c3aed; --blue:#2563eb; --teal:#0d9488;
+  --f:'Outfit',sans-serif; --mono:'JetBrains Mono',monospace;
+}
+html,body { height:100%; overflow:hidden; }
+body { background:var(--bg); color:var(--text); font-family:var(--f); font-size:15px; display:flex; flex-direction:column; }
+::-webkit-scrollbar { width:2px; }
+::-webkit-scrollbar-thumb { background:var(--b2); border-radius:2px; }
+
+/* TOPBAR */
+.topbar { flex-shrink:0; height:54px; display:flex; align-items:center; justify-content:space-between; padding:0 18px; background:var(--bg2); border-bottom:1px solid var(--b); z-index:10; }
+.top-left { display:flex; align-items:center; gap:10px; }
+.back-btn { display:flex; align-items:center; gap:6px; text-decoration:none; color:var(--m2); font-size:13px; font-weight:500; padding:5px 10px; border-radius:6px; border:1px solid var(--b2); transition:all .2s; }
+.back-btn:hover { color:var(--text); }
+.back-btn svg { width:14px; height:14px; stroke:currentColor; fill:none; stroke-width:2; stroke-linecap:round; }
+.topbar-logo { display:flex; align-items:center; gap:8px; font-weight:700; font-size:16px; }
+.logo-box { width:26px; height:26px; border-radius:6px; background:var(--acc); display:flex; align-items:center; justify-content:center; }
+.logo-box svg { width:13px; height:13px; stroke:#fff; fill:none; stroke-width:2; stroke-linecap:round; stroke-linejoin:round; }
+.top-right { display:flex; align-items:center; gap:10px; }
+.server-pill { display:flex; align-items:center; gap:6px; padding:4px 12px; border-radius:100px; font-family:var(--mono); font-size:11px; background:var(--bg3); border:1px solid var(--b2); transition:all .3s; }
+.server-dot { width:6px; height:6px; border-radius:50%; background:var(--muted); }
+.server-pill.ok .server-dot { background:var(--green); box-shadow:0 0 6px var(--green); }
+.server-pill.err .server-dot { background:var(--red); }
+.server-pill.ok { border-color:rgba(22,163,74,.2); }
+.server-pill.err { border-color:rgba(220,38,38,.2); }
+#server-txt { color:var(--m2); }
+.timer { font-family:var(--mono); font-size:14px; font-weight:500; color:var(--muted); min-width:44px; text-align:right; }
+.timer.running { color:var(--acc); }
+
+/* MAIN LAYOUT */
+.main { flex:1; display:grid; grid-template-columns:1fr 308px; min-height:0; overflow:hidden; }
+
+/* VIDEO */
+.video-col { display:flex; flex-direction:column; min-height:0; border-right:1px solid var(--b); }
+.video-wrap { position:relative; flex:1; background:#000; overflow:hidden; display:flex; align-items:center; justify-content:center; }
+#video { width:100%; height:100%; object-fit:cover; transform:scaleX(-1); display:block; }
+#canvas { display:none; }
+.cam-idle { position:absolute; inset:0; display:flex; flex-direction:column; align-items:center; justify-content:center; gap:14px; color:var(--muted); }
+.cam-idle-icon { width:56px; height:56px; border-radius:14px; background:var(--bg3); border:1px solid var(--b2); display:flex; align-items:center; justify-content:center; }
+.cam-idle-icon svg { width:24px; height:24px; stroke:var(--muted); fill:none; stroke-width:1.5; stroke-linecap:round; }
+
+/* HUD */
+.hud { position:absolute; inset:0; pointer-events:none; padding:14px; display:flex; flex-direction:column; justify-content:space-between; }
+.hud-top { display:flex; justify-content:space-between; align-items:flex-start; }
+.hud-bot { display:flex; justify-content:space-between; align-items:flex-end; }
+.corner { position:absolute; width:22px; height:22px; border-color:rgba(232,93,4,.4); border-style:solid; transition:border-color .3s; }
+.corner.tl { top:14px; left:14px; border-width:2px 0 0 2px; border-radius:4px 0 0 0; }
+.corner.tr { top:14px; right:14px; border-width:2px 2px 0 0; border-radius:0 4px 0 0; }
+.corner.bl { bottom:14px; left:14px; border-width:0 0 2px 2px; border-radius:0 0 0 4px; }
+.corner.br { bottom:14px; right:14px; border-width:0 2px 2px 0; border-radius:0 0 4px 0; }
+.corner.hot { border-color:rgba(220,38,38,.8) !important; }
+.status-badge { display:flex; align-items:center; gap:6px; padding:5px 12px; border-radius:100px; font-family:var(--mono); font-size:11px; font-weight:500; text-transform:uppercase; letter-spacing:.5px; backdrop-filter:blur(10px); transition:all .2s; }
+.status-badge.awake      { background:rgba(22,163,74,.2);  border:1px solid rgba(22,163,74,.35);  color:#4ade80; }
+.status-badge.drowsy     { background:rgba(220,38,38,.25); border:1px solid rgba(220,38,38,.5);   color:#f87171; animation:sblink .5s ease-in-out infinite; }
+.status-badge.distracted { background:rgba(37,99,235,.25); border:1px solid rgba(37,99,235,.5);   color:#93c5fd; animation:sblink .6s ease-in-out infinite; }
+.status-badge.no_face    { background:rgba(15,15,18,.7);   border:1px solid var(--b2);            color:var(--muted); }
+@keyframes sblink { 0%,100%{opacity:1} 50%{opacity:.5} }
+.sb-dot { width:7px; height:7px; border-radius:50%; background:currentColor; }
+.signals { display:flex; flex-direction:column; gap:5px; align-items:flex-end; }
+.sig { padding:3px 10px; border-radius:10px; font-family:var(--mono); font-size:10px; font-weight:500; letter-spacing:.3px; opacity:0; transform:translateX(8px); transition:opacity .2s,transform .2s; }
+.sig.on { opacity:1; transform:none; }
+.sig.eye  { background:rgba(220,38,38,.9);  color:#fff; }
+.sig.yawn { background:rgba(217,119,6,.9);  color:#fff; }
+.sig.nod  { background:rgba(124,58,237,.9); color:#fff; }
+.sig.dist { background:rgba(37,99,235,.9);  color:#fff; }
+.sig.hand { background:rgba(13,148,136,.9); color:#fff; }
+.fps-badge { font-family:var(--mono); font-size:10px; color:var(--muted); background:rgba(9,9,11,.6); padding:3px 8px; border-radius:4px; }
+.yaw-badge { font-family:var(--mono); font-size:10px; color:var(--muted); background:rgba(9,9,11,.6); padding:3px 8px; border-radius:4px; margin-right:6px; }
+.yaw-badge.warn { color:var(--amber); }
+.yaw-badge.danger { color:#f87171; }
+
+/* Calibration overlay */
+.cal-overlay { position:absolute; inset:0; background:rgba(9,9,11,.75); display:flex; flex-direction:column; align-items:center; justify-content:center; gap:14px; backdrop-filter:blur(4px); transition:opacity .5s; }
+.cal-overlay.done { opacity:0; pointer-events:none; }
+.cal-title { font-size:15px; font-weight:600; color:var(--text); }
+.cal-sub   { font-size:12px; color:var(--muted); }
+.cal-ring  { width:72px; height:72px; position:relative; }
+.cal-ring svg { width:72px; height:72px; transform:rotate(-90deg); }
+.cal-ring .track { fill:none; stroke:var(--b2); stroke-width:5; }
+.cal-ring .fill  { fill:none; stroke:var(--acc); stroke-width:5; stroke-linecap:round; stroke-dasharray:201; stroke-dashoffset:201; transition:stroke-dashoffset .3s; }
+.cal-pct { position:absolute; inset:0; display:flex; align-items:center; justify-content:center; font-family:var(--mono); font-size:15px; font-weight:600; color:var(--acc); }
+
+/* Alert bar */
+.alert-bar { flex-shrink:0; height:0; overflow:hidden; display:flex; align-items:center; justify-content:center; gap:10px; font-size:13px; font-weight:700; letter-spacing:.3px; transition:height .2s; }
+.alert-bar.show  { height:48px; }
+.alert-bar.eye   { background:rgba(220,38,38,.15); border-top:1px solid rgba(220,38,38,.3);  color:#f87171; animation:ab .5s infinite alternate; }
+.alert-bar.yawn  { background:rgba(217,119,6,.15); border-top:1px solid rgba(217,119,6,.3);  color:#fbbf24; animation:ab .6s infinite alternate; }
+.alert-bar.nod   { background:rgba(124,58,237,.15);border-top:1px solid rgba(124,58,237,.3); color:#c4b5fd; animation:ab .55s infinite alternate; }
+.alert-bar.dist  { background:rgba(37,99,235,.15); border-top:1px solid rgba(37,99,235,.3);  color:#93c5fd; animation:ab .5s infinite alternate; }
+.alert-bar.hand  { background:rgba(13,148,136,.15);border-top:1px solid rgba(13,148,136,.3); color:#5eead4; animation:ab .5s infinite alternate; }
+.alert-bar.multi { background:rgba(220,38,38,.2);  border-top:1px solid rgba(220,38,38,.4);  color:#f87171; animation:ab .35s infinite alternate; }
+@keyframes ab { from{opacity:1} to{opacity:.45} }
+.alert-bar svg { width:16px; height:16px; stroke:currentColor; fill:none; stroke-width:2; stroke-linecap:round; flex-shrink:0; }
+.lang-live-pill { font-family:var(--mono); font-size:11px; padding:2px 8px; border-radius:4px; background:rgba(255,255,255,.12); color:rgba(255,255,255,.7); }
+
+/* Controls */
+.controls { flex-shrink:0; display:flex; align-items:center; gap:8px; padding:10px 14px; background:var(--bg2); border-top:1px solid var(--b); }
+.btn { flex:1; padding:10px; border-radius:8px; border:none; font-family:var(--f); font-size:13px; font-weight:600; cursor:pointer; transition:all .15s; display:flex; align-items:center; justify-content:center; gap:6px; }
+.btn svg { width:14px; height:14px; stroke:currentColor; fill:none; stroke-width:2.5; stroke-linecap:round; }
+.btn-start { background:var(--acc); color:#fff; }
+.btn-start:hover { background:var(--acc2); }
+.btn-stop  { background:var(--bg3); color:var(--m2); border:1px solid var(--b2); }
+.btn-stop:hover { border-color:var(--red); color:#f87171; }
+.btn-reset { background:var(--bg3); color:var(--muted); border:1px solid var(--b); flex:0 0 44px; }
+.btn-reset:hover { border-color:var(--b2); color:var(--m2); }
+.btn:active { transform:scale(.97); }
+
+/* SIDEBAR */
+.sidebar { display:flex; flex-direction:column; overflow-y:auto; background:var(--bg); }
+.sb-section { padding:14px; border-bottom:1px solid var(--b); }
+.sb-label { font-family:var(--mono); font-size:9px; color:var(--muted); text-transform:uppercase; letter-spacing:1.2px; margin-bottom:10px; }
+
+/* LANGUAGE */
+.lang-header { display:flex; justify-content:space-between; align-items:center; margin-bottom:10px; }
+.lang-mode { display:flex; gap:4px; }
+.mode-btn { padding:3px 9px; border-radius:4px; font-size:10px; font-family:var(--mono); border:1px solid var(--b2); background:transparent; color:var(--muted); cursor:pointer; transition:all .15s; }
+.mode-btn.active { background:var(--adim); border-color:var(--acc); color:var(--acc); }
+.lang-grid { display:grid; grid-template-columns:1fr 1fr; gap:6px; }
+.lang-btn { padding:10px 8px; border-radius:8px; border:1px solid var(--b2); background:var(--bg3); cursor:pointer; transition:all .2s; display:flex; flex-direction:column; align-items:center; gap:3px; position:relative; }
+.lang-btn:hover { background:var(--sur); }
+.lang-btn.sel { border-color:var(--acc); background:var(--adim); }
+.lang-btn.sel::after { content:''; position:absolute; top:6px; right:6px; width:6px; height:6px; border-radius:50%; background:var(--acc); }
+.lang-btn.voice-native  { border-color:rgba(22,163,74,.3); }
+.lang-btn.voice-native::before  { content:'✓'; position:absolute; top:5px; left:7px; font-size:9px; color:var(--green); }
+.lang-btn.voice-fallback { border-color:rgba(217,119,6,.2); }
+.lang-btn.voice-fallback::before { content:'~'; position:absolute; top:5px; left:7px; font-size:10px; color:var(--amber); font-weight:700; }
+.lang-btn.voice-none { opacity:.65; }
+.lang-name   { font-size:12px; font-weight:700; color:var(--text); }
+.lang-native { font-size:16px; color:var(--m2); }
+.lang-sample { font-size:9px; color:var(--muted); font-family:var(--mono); text-align:center; line-height:1.4; margin-top:1px; }
+.lang-btn.sel .lang-name { color:var(--acc); }
+.voice-row { display:flex; gap:6px; margin-top:8px; }
+.test-btn { flex:1; padding:8px; border-radius:7px; border:1px solid var(--b2); background:transparent; color:var(--m2); font-family:var(--f); font-size:12px; font-weight:500; cursor:pointer; display:flex; align-items:center; justify-content:center; gap:5px; transition:all .2s; }
+.test-btn:hover { border-color:var(--acc); color:var(--acc); }
+.test-btn svg { width:13px; height:13px; stroke:currentColor; fill:none; stroke-width:2; stroke-linecap:round; }
+.voice-status { font-family:var(--mono); font-size:9px; text-align:center; margin-top:5px; padding:4px 8px; border-radius:4px; line-height:1.5; }
+.voice-status.ok   { color:var(--green); background:var(--gdim); }
+.voice-status.warn { color:var(--amber); background:rgba(217,119,6,.1); }
+.voice-status.err  { color:#f87171; background:var(--rdim); }
+.set-row { display:flex; align-items:center; justify-content:space-between; padding:6px 0; }
+.set-row + .set-row { border-top:1px solid var(--b); }
+.set-label { font-size:12px; color:var(--m2); }
+.set-select { background:var(--bg3); color:var(--m2); border:1px solid var(--b2); border-radius:5px; font-size:11px; font-family:var(--mono); padding:3px 6px; cursor:pointer; outline:none; }
+.vol-wrap { display:flex; align-items:center; gap:6px; }
+.vol-slider { width:80px; accent-color:var(--acc); cursor:pointer; }
+.vol-val { font-family:var(--mono); font-size:11px; color:var(--muted); min-width:32px; text-align:right; }
+
+/* Gauges */
+.gauge { margin-bottom:11px; }
+.gauge:last-child { margin-bottom:0; }
+.gauge-top { display:flex; justify-content:space-between; align-items:center; margin-bottom:5px; }
+.gauge-name { font-size:11px; color:var(--m2); font-weight:500; }
+.gauge-val { font-family:var(--mono); font-size:12px; font-weight:600; color:var(--text); transition:color .2s; }
+.gauge-val.warn   { color:var(--amber); }
+.gauge-val.danger { color:var(--red); }
+.gauge-track { height:5px; background:var(--b2); border-radius:3px; overflow:hidden; position:relative; }
+.gauge-fill  { height:100%; border-radius:3px; transition:width .1s linear, background .2s; }
+.gauge-tick  { position:absolute; top:0; height:100%; width:2px; background:rgba(255,255,255,.15); }
+#ear-fill { background:var(--green); }
+#mar-fill { background:var(--amber); }
+#nod-fill { background:var(--purple); }
+#yaw-fill { background:var(--blue); }
+
+/* Confidence pills */
+.conf-row { display:flex; gap:4px; margin-top:4px; flex-wrap:wrap; }
+.conf-pill { flex:1; text-align:center; font-family:var(--mono); font-size:9px; padding:2px 4px; border-radius:3px; background:var(--bg3); color:var(--muted); border:1px solid var(--b); min-width:40px; }
+.conf-pill.warn   { color:var(--amber); border-color:rgba(217,119,6,.2); background:rgba(217,119,6,.06); }
+.conf-pill.danger { color:#f87171; border-color:rgba(220,38,38,.2); background:rgba(220,38,38,.06); }
+
+/* Counters */
+.counter-row { display:grid; grid-template-columns:repeat(4,1fr); gap:5px; }
+.counter-card { background:var(--bg3); border:1px solid var(--b); border-radius:8px; padding:8px 4px; text-align:center; }
+.counter-num { font-family:var(--mono); font-size:16px; font-weight:600; line-height:1; display:block; transition:color .2s; }
+.counter-lbl { font-family:var(--mono); font-size:8px; color:var(--muted); text-transform:uppercase; letter-spacing:.4px; margin-top:3px; display:block; }
+
+/* Indicators */
+.ind-list { display:flex; flex-direction:column; gap:7px; }
+.ind { display:flex; align-items:center; gap:9px; padding:9px 11px; background:var(--bg3); border:1px solid var(--b); border-radius:8px; transition:all .25s; }
+.ind.active        { border-color:rgba(220,38,38,.35); background:rgba(220,38,38,.06); }
+.ind.active.amber  { border-color:rgba(217,119,6,.35); background:rgba(217,119,6,.06); }
+.ind.active.purple { border-color:rgba(124,58,237,.35);background:rgba(124,58,237,.06); }
+.ind.active.blue   { border-color:rgba(37,99,235,.35); background:rgba(37,99,235,.06); }
+.ind.active.teal   { border-color:rgba(13,148,136,.35);background:rgba(13,148,136,.06); }
+.ind-dot { width:7px; height:7px; border-radius:50%; background:var(--b2); flex-shrink:0; transition:all .25s; }
+.ind.active        .ind-dot { background:var(--red);    box-shadow:0 0 6px var(--red); }
+.ind.active.amber  .ind-dot { background:var(--amber);  box-shadow:0 0 6px var(--amber); }
+.ind.active.purple .ind-dot { background:var(--purple); box-shadow:0 0 6px var(--purple); }
+.ind.active.blue   .ind-dot { background:var(--blue);   box-shadow:0 0 6px var(--blue); }
+.ind.active.teal   .ind-dot { background:var(--teal);   box-shadow:0 0 6px var(--teal); }
+.ind-name  { font-size:12px; font-weight:500; flex:1; color:var(--m2); transition:color .25s; }
+.ind.active .ind-name { color:var(--text); }
+.ind-count { font-family:var(--mono); font-size:10px; color:var(--muted); }
+.ind.active .ind-count { color:var(--m2); }
+
+/* Stats */
+.stat-list { display:flex; flex-direction:column; }
+.stat-row { display:flex; justify-content:space-between; align-items:center; padding:7px 0; border-bottom:1px solid var(--b); }
+.stat-row:last-child { border-bottom:none; }
+.stat-k { font-size:12px; color:var(--muted); }
+.stat-v { font-family:var(--mono); font-size:12px; font-weight:600; color:var(--text); }
+
+/* Log */
+.log-header { display:flex; justify-content:space-between; align-items:center; padding:8px 14px 6px; border-bottom:1px solid var(--b); }
+.log-title { font-family:var(--mono); font-size:9px; color:var(--muted); text-transform:uppercase; letter-spacing:1.2px; }
+.export-btn { background:none; border:1px solid var(--b2); border-radius:4px; color:var(--muted); font-size:10px; font-family:var(--mono); padding:2px 8px; cursor:pointer; transition:all .15s; }
+.export-btn:hover { border-color:var(--acc); color:var(--acc); }
+.log-wrap { flex:1; overflow-y:auto; font-family:var(--mono); font-size:10px; }
+.log-entry { padding:5px 14px; border-bottom:1px solid var(--b); display:flex; gap:8px; }
+.log-time { color:var(--muted); opacity:.6; flex-shrink:0; }
+.log-msg  { color:var(--m2); }
+.log-entry.alert .log-msg { color:#f87171; }
+.log-entry.warn  .log-msg { color:#fbbf24; }
+.log-entry.ok    .log-msg { color:#4ade80; }
+.log-entry.info  .log-msg { color:#60a5fa; }
+.log-entry.voice .log-msg { color:var(--acc2); }
+
+/* Screen flash */
+.screen-flash { position:fixed; inset:0; pointer-events:none; z-index:9999; border:3px solid transparent; }
+.screen-flash.on { border-color:rgba(220,38,38,.5); animation:sf .5s infinite; }
+@keyframes sf { 0%,100%{border-color:rgba(220,38,38,.5)} 50%{border-color:rgba(220,38,38,.15)} }
+</style>
+</head>
+<body>
+
+<div class="screen-flash" id="screenFlash"></div>
+
+<!-- TOPBAR -->
+<div class="topbar">
+  <div class="top-left">
+    <a class="back-btn" href="/">
+      <svg viewBox="0 0 24 24"><polyline points="15 18 9 12 15 6"/></svg>Back
+    </a>
+    <div class="topbar-logo">
+      <div class="logo-box"><svg viewBox="0 0 24 24"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/><circle cx="12" cy="12" r="3"/></svg></div>
+      DrowseGuard <span style="color:var(--muted);font-weight:400;font-size:13px;margin-left:4px">/ Live Detector v4</span>
+    </div>
+  </div>
+  <div class="top-right">
+    <div class="server-pill" id="serverPill"><div class="server-dot"></div><span id="server-txt">connecting...</span></div>
+    <div class="timer" id="timer">00:00</div>
+  </div>
+</div>
+
+<div class="main">
+  <!-- VIDEO COLUMN -->
+  <div class="video-col">
+    <div class="video-wrap">
+      <video id="video" autoplay playsinline muted></video>
+      <canvas id="canvas"></canvas>
+
+      <div class="cam-idle" id="camIdle">
+        <div class="cam-idle-icon"><svg viewBox="0 0 24 24"><path d="M23 19a2 2 0 0 1-2 2H3a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h4l2-3h6l2 3h4a2 2 0 0 1 2 2z"/><circle cx="12" cy="13" r="4"/></svg></div>
+        <p style="font-size:14px;color:var(--m2)">Camera not started</p>
+        <p style="font-size:12px;color:var(--muted)">Select language below, then press Start</p>
+      </div>
+
+      <!-- Calibration overlay -->
+      <div class="cal-overlay" id="calOverlay" style="display:none">
+        <div class="cal-ring">
+          <svg viewBox="0 0 72 72"><circle class="track" cx="36" cy="36" r="32"/><circle class="fill" id="calRingFill" cx="36" cy="36" r="32"/></svg>
+          <div class="cal-pct" id="calPct">0%</div>
+        </div>
+        <div class="cal-title">Calibrating to your face…</div>
+        <div class="cal-sub">Look straight at camera, eyes open, face forward</div>
+      </div>
+
+      <div class="hud" id="hud" style="display:none">
+        <div class="corner tl" id="c-tl"></div><div class="corner tr" id="c-tr"></div>
+        <div class="corner bl" id="c-bl"></div><div class="corner br" id="c-br"></div>
+        <div class="hud-top">
+          <div class="status-badge no_face" id="statusBadge"><div class="sb-dot"></div><span id="statusText">No face</span></div>
+          <div class="signals">
+            <span class="sig eye"  id="sigEye">EYES</span>
+            <span class="sig yawn" id="sigYawn">YAWN</span>
+            <span class="sig nod"  id="sigNod">NOD</span>
+            <span class="sig dist" id="sigDist">LOOKING AWAY</span>
+            <span class="sig hand" id="sigHand">HANDS OFF</span>
+          </div>
+        </div>
+        <div class="hud-bot">
+          <div class="fps-badge" id="fpsBadge">— fps</div>
+          <div class="yaw-badge" id="yawBadge">yaw 0.00</div>
+        </div>
+      </div>
+    </div>
+
+    <div class="alert-bar" id="alertBar">
+      <svg viewBox="0 0 24 24"><path d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"/><line x1="12" y1="9" x2="12" y2="13"/><line x1="12" y1="17" x2="12.01" y2="17"/></svg>
+      <span id="alertText">Alert</span>
+      <span class="lang-live-pill" id="langLivePill" style="display:none"></span>
+    </div>
+
+    <div class="controls">
+      <button class="btn btn-start" id="btnStart" onclick="startDetection()">
+        <svg viewBox="0 0 24 24"><polygon points="5 3 19 12 5 21 5 3"/></svg>Start Detection
+      </button>
+      <button class="btn btn-stop" id="btnStop" onclick="stopDetection()" style="display:none">
+        <svg viewBox="0 0 24 24"><rect x="3" y="3" width="18" height="18" rx="2"/></svg>Stop
+      </button>
+      <button class="btn btn-reset" onclick="resetDetector()" title="Reset session">
+        <svg viewBox="0 0 24 24"><polyline points="1 4 1 10 7 10"/><path d="M3.51 15a9 9 0 1 0 .49-3"/></svg>
+      </button>
+    </div>
+  </div>
+
+  <!-- SIDEBAR -->
+  <div class="sidebar">
+
+    <!-- LANGUAGE + VOICE SETTINGS -->
+    <div class="sb-section">
+      <div class="lang-header">
+        <span class="sb-label" style="margin:0">Alert Language</span>
+        <div class="lang-mode">
+          <button class="mode-btn active" id="modeVoice" onclick="setMode('voice')">Voice</button>
+          <button class="mode-btn"        id="modeBeep"  onclick="setMode('beep')">Beep</button>
+        </div>
+      </div>
+      <div class="lang-grid" id="langGrid">
+        <button class="lang-btn sel" data-lang="hi" onclick="selectLang(this)">
+          <span class="lang-name">Hindi</span>
+          <span class="lang-native">हिन्दी</span>
+          <span class="lang-sample">"आँखें बंद हो रही हैं"</span>
+        </button>
+        <button class="lang-btn" data-lang="en" onclick="selectLang(this)">
+          <span class="lang-name">English</span>
+          <span class="lang-native">English</span>
+          <span class="lang-sample">"Eyes are closing"</span>
+        </button>
+        <button class="lang-btn" data-lang="kn" onclick="selectLang(this)">
+          <span class="lang-name">Kannada</span>
+          <span class="lang-native">ಕನ್ನಡ</span>
+          <span class="lang-sample">"ಕಣ್ಣು ಮುಚ್ಚಿಕೊಳ್ಳುತ್ತಿದೆ"</span>
+        </button>
+        <button class="lang-btn" data-lang="te" onclick="selectLang(this)">
+          <span class="lang-name">Telugu</span>
+          <span class="lang-native">తెలుగు</span>
+          <span class="lang-sample">"కళ్ళు మూసుకుంటున్నాయి"</span>
+        </button>
+      </div>
+      <div style="display:flex;gap:10px;margin-top:7px;font-family:var(--mono);font-size:9px;color:var(--muted)">
+        <span style="color:var(--green)">✓ native voice</span>
+        <span style="color:var(--amber)">~ similar voice</span>
+        <span style="opacity:.5">unavailable</span>
+      </div>
+      <div class="voice-row">
+        <button class="test-btn" onclick="testVoice()">
+          <svg viewBox="0 0 24 24"><polygon points="11 5 6 9 2 9 2 15 6 15 11 19 11 5"/><path d="M15.54 8.46a5 5 0 0 1 0 7.07"/></svg>
+          Test Alert Voice
+        </button>
+      </div>
+      <div class="voice-status" id="voiceStatus">Checking voice availability…</div>
+      <div class="set-row" style="margin-top:8px">
+        <span class="set-label">Volume</span>
+        <div class="vol-wrap">
+          <input type="range" class="vol-slider" id="volRange" min="0" max="1" step="0.05" value="0.9"
+            oninput="document.getElementById('volVal').textContent=Math.round(this.value*100)+'%'">
+          <span class="vol-val" id="volVal">90%</span>
+        </div>
+      </div>
+      <div class="set-row">
+        <span class="set-label">Repeat every</span>
+        <select class="set-select" id="repeatInterval">
+          <option value="4000">4 sec</option>
+          <option value="6000" selected>6 sec</option>
+          <option value="10000">10 sec</option>
+          <option value="15000">15 sec</option>
+          <option value="0">Once only</option>
+        </select>
+      </div>
+    </div>
+
+    <!-- GAUGES -->
+    <div class="sb-section">
+      <div class="sb-label">Live Metrics</div>
+      <div class="gauge">
+        <div class="gauge-top"><span class="gauge-name">Eye Aspect Ratio</span><span class="gauge-val" id="earVal">—</span></div>
+        <div class="gauge-track"><div class="gauge-fill" id="ear-fill" style="width:0%"></div><div class="gauge-tick" id="earTick" style="left:55%"></div></div>
+      </div>
+      <div class="gauge">
+        <div class="gauge-top"><span class="gauge-name">Mouth Open (Jaw)</span><span class="gauge-val" id="marVal">—</span></div>
+        <div class="gauge-track"><div class="gauge-fill" id="mar-fill" style="width:0%"></div><div class="gauge-tick" style="left:70%"></div></div>
+      </div>
+      <div class="gauge">
+        <div class="gauge-top"><span class="gauge-name">Head Nod Drop</span><span class="gauge-val" id="nodVal">—</span></div>
+        <div class="gauge-track"><div class="gauge-fill" id="nod-fill" style="width:0%"></div><div class="gauge-tick" style="left:50%"></div></div>
+      </div>
+      <div class="gauge">
+        <div class="gauge-top"><span class="gauge-name">Face Yaw (side turn)</span><span class="gauge-val" id="yawVal">—</span></div>
+        <div class="gauge-track"><div class="gauge-fill" id="yaw-fill" style="width:0%"></div><div class="gauge-tick" style="left:35%"></div></div>
+      </div>
+      <div class="conf-row">
+        <div class="conf-pill" id="confEye">Eye 0%</div>
+        <div class="conf-pill" id="confYawn">Yawn 0%</div>
+        <div class="conf-pill" id="confNod">Nod 0%</div>
+        <div class="conf-pill" id="confHand">Hand 0%</div>
+      </div>
+    </div>
+
+    <!-- COUNTERS -->
+    <div class="sb-section">
+      <div class="sb-label">Frame Counters</div>
+      <div class="counter-row">
+        <div class="counter-card"><span class="counter-num" id="cntEye">0</span><span class="counter-lbl">Eye</span></div>
+        <div class="counter-card"><span class="counter-num" id="cntYawn">0</span><span class="counter-lbl">Yawn</span></div>
+        <div class="counter-card"><span class="counter-num" id="cntNod">0</span><span class="counter-lbl">Nod</span></div>
+        <div class="counter-card"><span class="counter-num" id="cntHand">0</span><span class="counter-lbl">Hand</span></div>
+      </div>
+    </div>
+
+    <!-- DETECTORS -->
+    <div class="sb-section">
+      <div class="sb-label">Detectors</div>
+      <div class="ind-list">
+        <div class="ind"        id="indEye"> <div class="ind-dot"></div><span class="ind-name">Eye closure</span>    <span class="ind-count" id="indEyeC">0 alerts</span></div>
+        <div class="ind amber"  id="indYawn"><div class="ind-dot"></div><span class="ind-name">Yawning</span>        <span class="ind-count" id="indYawnC">0 alerts</span></div>
+        <div class="ind purple" id="indNod"> <div class="ind-dot"></div><span class="ind-name">Head drooping</span>  <span class="ind-count" id="indNodC">0 alerts</span></div>
+        <div class="ind blue"   id="indDist"><div class="ind-dot"></div><span class="ind-name">Looking away</span>   <span class="ind-count" id="indDistC">0 alerts</span></div>
+        <div class="ind teal"   id="indHand"><div class="ind-dot"></div><span class="ind-name">Hands off wheel</span><span class="ind-count" id="indHandC">0 alerts</span></div>
+      </div>
+    </div>
+
+    <!-- SESSION -->
+    <div class="sb-section">
+      <div class="sb-label">Session</div>
+      <div class="stat-list">
+        <div class="stat-row"><span class="stat-k">Frames processed</span><span class="stat-v" id="stFrames">0</span></div>
+        <div class="stat-row"><span class="stat-k">Total alerts</span><span class="stat-v" id="stAlerts">0</span></div>
+        <div class="stat-row"><span class="stat-k">Voice alerts played</span><span class="stat-v" id="stVoice">0</span></div>
+        <div class="stat-row"><span class="stat-k">EAR baseline → thr</span><span class="stat-v" id="stBaseline" style="color:var(--muted)">calibrating…</span></div>
+        <div class="stat-row"><span class="stat-k">PERCLOS</span><span class="stat-v" id="stPerclos" style="color:var(--muted)">—</span></div>
+        <div class="stat-row"><span class="stat-k">Status</span><span class="stat-v" id="stStatus" style="color:var(--muted)">—</span></div>
+      </div>
+    </div>
+
+    <!-- LOG -->
+    <div class="log-header">
+      <span class="log-title">Event Log</span>
+      <button class="export-btn" onclick="exportCSV()">Export CSV</button>
+    </div>
+    <div class="log-wrap" id="logWrap">
+      <div class="log-entry info"><span class="log-time">—</span><span class="log-msg">Select language and press Start…</span></div>
+    </div>
+  </div>
+</div>
+
+<script>
+// ═══════════════════════════════════════════════════════════════
+//  PHRASES — 5 alert types × 4 languages
+// ═══════════════════════════════════════════════════════════════
+const PHRASES = {
+  hi: {
+    eye:   ['आँखें बंद हो रही हैं! सावधान!','ध्यान दें! आँखें बंद हो रही हैं।','नींद आ रही है। गाड़ी रोकें!'],
+    yawn:  ['जम्हाई आ रही है। ब्रेक लें।','थकान हो रही है। थोड़ा आराम करें।','नींद के संकेत हैं। गाड़ी रोकें।'],
+    nod:   ['सिर झुक रहा है! सावधान!','सोने की कोशिश मत करो! गाड़ी रोकें!','खतरा! सिर झुक रहा है।'],
+    dist:  ['सड़क पर ध्यान दो! बाहर मत देखो!','नज़र सड़क पर रखो!','खतरा! सड़क से नज़र हट रही है।'],
+    hand:  ['स्टेयरिंग पकड़ो! हाथ हटा लिए हैं!','हाथ वापस स्टेयरिंग पर रखो!','ध्यान दें! स्टेयरिंग छोड़ दी है।'],
+    multi: ['बहुत खतरनाक! तुरंत गाड़ी रोकें!','आपातकाल! गाड़ी साइड में लगाएं!','रुकिए! अभी गाड़ी रोकें!']
+  },
+  en: {
+    eye:   ['Warning! Your eyes are closing.','Stay alert! Eyes are shutting.','Drowsiness detected. Pull over safely.'],
+    yawn:  ['You are yawning. Take a break soon.','Fatigue warning. Please rest.','Yawning detected. Stop and rest.'],
+    nod:   ['Warning! Your head is drooping.','Head nodding detected. Pull over!','Danger! You are falling asleep.'],
+    dist:  ['Eyes on the road! Stop looking away!','Watch the road ahead!','Danger! You are looking away from the road.'],
+    hand:  ['Hands on the wheel! Grip the steering!','Put your hands back on the steering wheel!','Warning! Hands off the wheel detected.'],
+    multi: ['Critical alert! Stop the vehicle now!','Emergency! Pull over immediately!','Multiple alerts! Stop driving now!']
+  },
+  kn: {
+    eye:   ['ಎಚ್ಚರ! ಕಣ್ಣು ಮುಚ್ಚಿಕೊಳ್ಳುತ್ತಿದೆ.','ಗಮನ ಕೊಡಿ! ಕಣ್ಣು ಮುಚ್ಚುತ್ತಿದೆ.','ನಿದ್ದೆ ಬರುತ್ತಿದೆ. ಗಾಡಿ ನಿಲ್ಲಿಸಿ!'],
+    yawn:  ['ಆಕಳಿಕೆ ಬರುತ್ತಿದೆ. ವಿಶ್ರಾಂತಿ ತೆಗೆದುಕೊಳ್ಳಿ.','ದಣಿವಾಗಿದೆ. ಗಾಡಿ ನಿಲ್ಲಿಸಿ.','ಎಚ್ಚರ! ನಿದ್ದೆಯ ಸಂಕೇತ.'],
+    nod:   ['ತಲೆ ತೂಗಾಡುತ್ತಿದೆ. ಎಚ್ಚರ!','ಅಪಾಯ! ತಲೆ ಕೆಳಗೆ ಬಾಗುತ್ತಿದೆ.','ಗಾಡಿ ನಿಲ್ಲಿಸಿ! ನಿದ್ದೆ ಬರುತ್ತಿದೆ.'],
+    dist:  ['ರಸ್ತೆ ನೋಡಿ! ಬೇರೆಡೆ ನೋಡಬೇಡಿ!','ಗಮನ ರಸ್ತೆಯ ಮೇಲಿರಲಿ!','ಅಪಾಯ! ರಸ್ತೆಯಿಂದ ದೃಷ್ಟಿ ಸರಿದಿದೆ.'],
+    hand:  ['ಸ್ಟೀರಿಂಗ್ ಹಿಡಿಯಿರಿ! ಕೈಗಳು ತೆಗೆದಿವೆ!','ಕೈಗಳನ್ನು ಸ್ಟೀರಿಂಗ್ ಮೇಲೆ ಇಡಿ!','ಎಚ್ಚರ! ಸ್ಟೀರಿಂಗ್ ಬಿಟ್ಟಿದ್ದಾರೆ.'],
+    multi: ['ತುರ್ತು! ತಕ್ಷಣ ಗಾಡಿ ನಿಲ್ಲಿಸಿ!','ಅಪಾಯ! ಗಾಡಿ ಪಕ್ಕಕ್ಕೆ ನಿಲ್ಲಿಸಿ!','ನಿಲ್ಲಿಸಿ! ಇದು ತುರ್ತು ಸ್ಥಿತಿ!']
+  },
+  te: {
+    eye:   ['జాగ్రత్త! కళ్ళు మూసుకుంటున్నాయి.','హెచ్చరిక! కళ్ళు మూత పడుతున్నాయి.','నిద్ర వస్తోంది. వాహనం ఆపండి!'],
+    yawn:  ['జమ్మురు వస్తోంది. విశ్రాంతి తీసుకోండి.','అలసిపోయారు. వాహనం ఆపండి.','నిద్ర సంకేతాలు ఉన్నాయి. ఆగండి.'],
+    nod:   ['తల వంగుతోంది. జాగ్రత్త!','ప్రమాదం! తల కిందకు పడుతోంది.','వాహనం ఆపండి! నిద్రపోతున్నారు.'],
+    dist:  ['రోడ్డు చూడండి! పక్కకు చూడకండి!','దృష్టి రోడ్డుపై ఉంచండి!','ప్రమాదం! రోడ్డు నుండి దృష్టి మళ్ళింది.'],
+    hand:  ['స్టీరింగ్ పట్టుకోండి! చేతులు తీశారు!','చేతులు స్టీరింగ్ పై ఉంచండి!','హెచ్చరిక! స్టీరింగ్ వదిలారు.'],
+    multi: ['అత్యవసరం! వెంటనే వాహనం ఆపండి!','ప్రమాదం! వాహనం పక్కన ఆపండి!','ఆగండి! అత్యవసర స్థితి!']
+  }
+};
+
+const LANG_PRIORITY = {
+  hi: ['hi-IN', 'hi', 'en-IN', 'en-US', 'en'],
+  en: ['en-IN', 'en-US', 'en-GB', 'en'],
+  kn: ['kn-IN', 'kn', 'hi-IN', 'hi', 'en-IN', 'en-US', 'en'],
+  te: ['te-IN', 'te', 'hi-IN', 'hi', 'en-IN', 'en-US', 'en'],
+};
+const LANG_BCP   = { hi:'hi-IN', en:'en-IN', kn:'kn-IN', te:'te-IN' };
+const LANG_NAMES = { hi:'हिन्दी', en:'EN', kn:'ಕನ್ನಡ', te:'తెలుగు' };
+
+// STATE
+const SERVER = 'http://localhost:5000';
+const FPS    = 10;
+let stream=null, frameInterval=null, timerInterval=null, repeatTimer=null;
+let sessionStart=null, fpsCount=0, fpsLast=Date.now();
+let isAlerting=false, currentType=null, currentLang='hi', alertMode='voice';
+let voiceCount=0, phraseIdx={}, logEntries=[];
+let audioCtx=null, allVoices=[];
+let voiceCache = {};
+
+// VOICE ENGINE
+function loadVoices() {
+  allVoices = window.speechSynthesis ? speechSynthesis.getVoices() : [];
+  voiceCache = {};
+  resolveAllLangs();
+  updateVoiceStatus();
+  markLangButtons();
+}
+if (window.speechSynthesis) {
+  speechSynthesis.onvoiceschanged = loadVoices;
+  setTimeout(loadVoices, 300);
+  setTimeout(loadVoices, 1200);
+}
+
+function resolveVoice(lang) {
+  if (voiceCache[lang]) return voiceCache[lang];
+  if (!allVoices.length) allVoices = speechSynthesis.getVoices();
+  const prio = LANG_PRIORITY[lang] || ['en-IN','en-US','en'];
+  for (const tag of prio) {
+    const exact = allVoices.find(v => v.lang === tag);
+    if (exact) {
+      const quality = (exact.lang === LANG_BCP[lang] || exact.lang === lang) ? 'native' : 'fallback';
+      voiceCache[lang] = { voice: exact, quality };
+      return voiceCache[lang];
+    }
+    const prefix = allVoices.find(v => v.lang.startsWith(tag.split('-')[0] + '-') || v.lang === tag.split('-')[0]);
+    if (prefix) {
+      voiceCache[lang] = { voice: prefix, quality: 'fallback' };
+      return voiceCache[lang];
+    }
+  }
+  voiceCache[lang] = { voice: null, quality: 'none' };
+  return voiceCache[lang];
+}
+function resolveAllLangs() { ['hi','en','kn','te'].forEach(resolveVoice); }
+function markLangButtons() {
+  document.querySelectorAll('.lang-btn').forEach(btn => {
+    const lang = btn.dataset.lang;
+    const res  = voiceCache[lang] || { quality: 'none' };
+    btn.classList.remove('voice-native','voice-fallback','voice-none');
+    if (res.quality === 'native')        btn.classList.add('voice-native');
+    else if (res.quality === 'fallback') btn.classList.add('voice-fallback');
+    else                                 btn.classList.add('voice-none');
+  });
+}
+function updateVoiceStatus() {
+  const el  = document.getElementById('voiceStatus');
+  if (!window.speechSynthesis) { el.textContent='Speech not supported — beep mode active'; el.className='voice-status err'; setMode('beep'); return; }
+  const res = resolveVoice(currentLang);
+  if (!res.voice) { el.textContent=`No ${LANG_NAMES[currentLang]} voice found.\nUsing beep for this language.`; el.className='voice-status err'; return; }
+  if (res.quality === 'native') { el.textContent=`✓ Native: ${res.voice.name} (${res.voice.lang})`; el.className='voice-status ok'; }
+  else { el.textContent=`~ Fallback: ${res.voice.name} (${res.voice.lang})\nAlert in available voice`; el.className='voice-status warn'; }
+}
+function getPhrase(type, lang) {
+  const pool = PHRASES[lang]?.[type] || PHRASES.en[type] || ['Alert!'];
+  const key  = lang + '_' + type;
+  phraseIdx[key] = (phraseIdx[key] || 0);
+  const p = pool[phraseIdx[key] % pool.length];
+  phraseIdx[key]++;
+  return p;
+}
+async function speak(text, lang) {
+  return new Promise(res => {
+    if (!window.speechSynthesis) { res(); return; }
+    speechSynthesis.cancel();
+    const u = new SpeechSynthesisUtterance(text);
+    const found = resolveVoice(lang);
+    u.lang   = found.voice ? found.voice.lang : LANG_BCP[lang];
+    u.volume = parseFloat(document.getElementById('volRange').value);
+    u.rate   = 0.88;
+    u.pitch  = 1.0;
+    if (found.voice) u.voice = found.voice;
+    u.onend  = res;
+    u.onerror = () => { playBeep(currentType || 'eye'); res(); };
+    speechSynthesis.speak(u);
+    setTimeout(res, 6000);
+  });
+}
+
+// BEEP
+function getAC() { if (!audioCtx) audioCtx = new (window.AudioContext||window.webkitAudioContext)(); return audioCtx; }
+function beepTone(freq, dur, wave) {
+  try {
+    const ac=getAC(), osc=ac.createOscillator(), gain=ac.createGain();
+    osc.connect(gain); gain.connect(ac.destination);
+    osc.type=wave||'square'; osc.frequency.value=freq;
+    const v=parseFloat(document.getElementById('volRange').value)*0.6;
+    gain.gain.setValueAtTime(v, ac.currentTime);
+    gain.gain.exponentialRampToValueAtTime(0.001, ac.currentTime+dur);
+    osc.start(); osc.stop(ac.currentTime+dur);
+  } catch(e){}
+}
+function playBeep(type) {
+  if (type==='eye')   { beepTone(1000,.18,'square'); setTimeout(()=>beepTone(1000,.18,'square'),220); }
+  if (type==='yawn')  { beepTone(520,.45,'sine'); }
+  if (type==='nod')   { beepTone(700,.2,'triangle'); setTimeout(()=>beepTone(500,.25,'triangle'),230); }
+  if (type==='dist')  { [0,140,280].forEach(d=>setTimeout(()=>beepTone(750,.1,'square'),d)); }
+  if (type==='hand')  { [0,150,300].forEach(d=>setTimeout(()=>beepTone(880,.12,'square'),d)); }
+  if (type==='multi') { beepTone(1100,.15,'square'); setTimeout(()=>beepTone(900,.15,'square'),180); setTimeout(()=>beepTone(1100,.25,'square'),360); }
+}
+
+// ALERT MANAGEMENT
+async function fireAlert(type) {
+  const phrase = getPhrase(type, currentLang);
+  addLog(`[${LANG_NAMES[currentLang]}] ${phrase}`, 'voice');
+  voiceCount++;
+  document.getElementById('stVoice').textContent = voiceCount;
+  const res = resolveVoice(currentLang);
+  if (alertMode === 'voice' && res.voice) await speak(phrase, currentLang);
+  else playBeep(type);
+}
+function startAlert(type) {
+  if (isAlerting && type === currentType) return;
+  stopAlert();
+  isAlerting = true; currentType = type;
+  fireAlert(type);
+  const ms = parseInt(document.getElementById('repeatInterval').value);
+  if (ms > 0) repeatTimer = setInterval(() => { if (isAlerting) fireAlert(currentType); }, ms);
+}
+function stopAlert() {
+  if (!isAlerting) return;
+  isAlerting = false; currentType = null;
+  clearInterval(repeatTimer); repeatTimer = null;
+  window.speechSynthesis && speechSynthesis.cancel();
+}
+
+// UI CONTROLS
+function selectLang(btn) {
+  document.querySelectorAll('.lang-btn').forEach(b => b.classList.remove('sel'));
+  btn.classList.add('sel');
+  currentLang = btn.dataset.lang;
+  voiceCache  = {};
+  resolveAllLangs();
+  updateVoiceStatus();
+  addLog('Language: ' + btn.querySelector('.lang-name').textContent, 'info');
+}
+function setMode(mode) {
+  alertMode = mode;
+  document.getElementById('modeVoice').classList.toggle('active', mode==='voice');
+  document.getElementById('modeBeep').classList.toggle('active',  mode==='beep');
+  document.getElementById('langGrid').style.opacity = mode==='beep' ? '.4' : '1';
+  addLog('Alert mode: ' + mode, 'info');
+}
+async function testVoice() {
+  try { if (!audioCtx) audioCtx = new (window.AudioContext||window.webkitAudioContext)(); } catch(e){}
+  if (window.speechSynthesis) { const u=new SpeechSynthesisUtterance(''); speechSynthesis.speak(u); }
+  const phrase = getPhrase('eye', currentLang);
+  addLog(`Testing [${LANG_NAMES[currentLang]}]: "${phrase}"`, 'voice');
+  const res = resolveVoice(currentLang);
+  if (alertMode === 'voice' && res.voice) await speak(phrase, currentLang);
+  else playBeep('eye');
+}
+
+// SERVER
+async function checkServer() {
+  try { const r=await fetch(`${SERVER}/status`,{signal:AbortSignal.timeout(2000)}); setServerOk(r.ok); }
+  catch { setServerOk(false); }
+}
+function setServerOk(ok) {
+  document.getElementById('serverPill').className='server-pill '+(ok?'ok':'err');
+  document.getElementById('server-txt').textContent=ok?'server: ok':'offline';
+}
+checkServer(); setInterval(checkServer, 5000);
+
+// CAMERA
+async function startDetection() {
+  try { if (!audioCtx) audioCtx = new (window.AudioContext||window.webkitAudioContext)(); } catch(e){}
+  if (window.speechSynthesis) { const u=new SpeechSynthesisUtterance(''); speechSynthesis.speak(u); }
+  try {
+    stream = await navigator.mediaDevices.getUserMedia({video:{facingMode:'user',width:640,height:480},audio:false});
+    const vid=document.getElementById('video'), can=document.getElementById('canvas');
+    vid.srcObject=stream; await vid.play();
+    can.width=640; can.height=480;
+    document.getElementById('camIdle').style.display='none';
+    document.getElementById('hud').style.display='block';
+    document.getElementById('calOverlay').style.display='flex';
+    document.getElementById('btnStart').style.display='none';
+    document.getElementById('btnStop').style.display='flex';
+    frameInterval=setInterval(sendFrame, 1000/FPS);
+    startTimer();
+    addLog('Detection started — '+document.querySelector('.lang-btn.sel .lang-name').textContent+' voice alerts','ok');
+  } catch(e) { addLog('Camera error: '+e.message,'alert'); }
+}
+function stopDetection() {
+  clearInterval(frameInterval); frameInterval=null;
+  clearInterval(timerInterval); document.getElementById('timer').classList.remove('running');
+  stopAlert(); setAlertBar(false);
+  if (stream) { stream.getTracks().forEach(t=>t.stop()); stream=null; }
+  document.getElementById('screenFlash').classList.remove('on');
+  document.getElementById('camIdle').style.display='flex';
+  document.getElementById('hud').style.display='none';
+  document.getElementById('calOverlay').style.display='none';
+  document.getElementById('btnStart').style.display='flex';
+  document.getElementById('btnStop').style.display='none';
+  addLog('Detection stopped','info');
+}
+
+// SEND FRAME
+async function sendFrame() {
+  const vid=document.getElementById('video'), can=document.getElementById('canvas');
+  if (!stream || !vid.srcObject) return;
+  can.getContext('2d').drawImage(vid,0,0,can.width,can.height);
+  can.toBlob(async blob=>{
+    if (!blob) return;
+    try {
+      const r=await fetch(`${SERVER}/detect`,{method:'POST',headers:{'Content-Type':'image/jpeg'},body:await blob.arrayBuffer(),signal:AbortSignal.timeout(2000)});
+      updateUI(await r.json()); setServerOk(true);
+      fpsCount++;
+      const now=Date.now();
+      if (now-fpsLast>=1000) { document.getElementById('fpsBadge').textContent=fpsCount+' fps'; fpsCount=0; fpsLast=now; }
+    } catch { setServerOk(false); }
+  },'image/jpeg',0.72);
+}
+
+// UPDATE UI
+function updateUI(d) {
+  if (d.error) return;
+
+  // Calibration
+  const calDone = d.calibrated || false;
+  const calOverlay = document.getElementById('calOverlay');
+  if (calDone) {
+    calOverlay.classList.add('done');
+  } else {
+    calOverlay.classList.remove('done');
+    calOverlay.style.display = 'flex';
+    const calPct = d.calibration_progress || 0;
+    document.getElementById('calPct').textContent = calPct + '%';
+    const circ = document.getElementById('calRingFill');
+    circ.style.strokeDashoffset = 201 - (201 * calPct / 100);
+  }
+
+  // Status badge
+  const sm={drowsy:'DROWSY',awake:'Awake',distracted:'DISTRACTED',no_face:'No face'};
+  document.getElementById('statusBadge').className='status-badge '+(d.status||'no_face');
+  document.getElementById('statusText').textContent=sm[d.status]||d.status;
+
+  const hot=d.status==='drowsy';
+  ['c-tl','c-tr','c-bl','c-br'].forEach(id=>document.getElementById(id).classList.toggle('hot',hot));
+
+  setSig('sigEye',d.eye_alert);
+  setSig('sigYawn',d.yawn_alert);
+  setSig('sigNod',d.nod_alert);
+  setSig('sigDist',d.distract_alert);
+  setSig('sigHand',d.hand_alert);
+
+  // EAR gauge
+  if (d.ear != null) {
+    const thr = d.ear_threshold || 0.21;
+    const p   = Math.min(100, (d.ear / 0.45) * 100);
+    const danger = d.ear < thr;
+    setGauge('ear-fill', p, danger);
+    const cls = danger ? 'danger' : d.ear < thr + 0.05 ? 'warn' : '';
+    setGaugeVal('earVal', d.ear.toFixed(3), cls);
+    const tickPct = Math.min(99, (thr / 0.45) * 100);
+    document.getElementById('earTick').style.left = tickPct + '%';
+  }
+
+  // MAR gauge
+  if (d.mar != null) {
+    const p = Math.min(100, (d.mar / 0.50) * 100);
+    setGauge('mar-fill', p, d.mar > 0.42, '#d97706');
+    setGaugeVal('marVal', d.mar.toFixed(4), d.mar > 0.42 ? 'danger' : d.mar > 0.30 ? 'warn' : '');
+  }
+
+  // Nod gauge
+  if (d.nod_drop != null) {
+    const p = Math.min(100, Math.max(0, (d.nod_drop / 0.15) * 100));
+    setGauge('nod-fill', p, d.nod_drop > 0.07, '#7c3aed');
+    setGaugeVal('nodVal', d.nod_drop.toFixed(3), d.nod_drop > 0.07 ? 'danger' : '');
+  }
+
+  // Yaw gauge
+  if (d.yaw != null) {
+    const p = Math.min(100, (d.yaw / 0.60) * 100);
+    setGauge('yaw-fill', p, d.yaw > 0.35, '#2563eb');
+    const cls = d.yaw > 0.35 ? 'danger' : d.yaw > 0.22 ? 'warn' : '';
+    setGaugeVal('yawVal', d.yaw.toFixed(3), cls);
+    // Update yaw badge in HUD
+    const yb = document.getElementById('yawBadge');
+    yb.textContent = 'yaw ' + d.yaw.toFixed(2);
+    yb.className   = 'yaw-badge' + (d.yaw > 0.35 ? ' danger' : d.yaw > 0.22 ? ' warn' : '');
+  }
+
+  setConfPill('confEye',  d.ear_confidence || 0);
+  setConfPill('confYawn', d.mar_confidence || 0);
+  setConfPill('confNod',  d.nod_confidence || 0);
+  setConfPill('confHand', d.hand_confidence || 0);
+
+  setCnt('cntEye',  d.ear_frames  || 0, 25);
+  setCnt('cntYawn', d.mar_frames  || 0, 14);
+  setCnt('cntNod',  d.nod_frames  || 0, 12);
+  setCnt('cntHand', d.hand_frames || 0, 15);
+
+  setInd('indEye',  d.eye_alert,      'indEyeC',  d.total_eye_alerts     || 0);
+  setInd('indYawn', d.yawn_alert,     'indYawnC', d.total_yawn_alerts    || 0);
+  setInd('indNod',  d.nod_alert,      'indNodC',  d.total_nod_alerts     || 0);
+  setInd('indDist', d.distract_alert, 'indDistC', d.total_distract_alerts|| 0);
+  setInd('indHand', d.hand_alert,     'indHandC', d.total_hand_alerts    || 0);
+
+  document.getElementById('stFrames').textContent = d.frames_processed || 0;
+  const tot = (d.total_eye_alerts||0)+(d.total_yawn_alerts||0)+(d.total_nod_alerts||0)+(d.total_distract_alerts||0)+(d.total_hand_alerts||0);
+  document.getElementById('stAlerts').textContent = tot;
+
+  if (d.ear_baseline) {
+    document.getElementById('stBaseline').textContent = d.ear_baseline.toFixed(3) + ' → ' + (d.ear_threshold||0).toFixed(3);
+    document.getElementById('stBaseline').style.color = 'var(--text)';
+  }
+
+  // PERCLOS display
+  const pc = document.getElementById('stPerclos');
+  const pv = Math.round((d.perclos||0)*100);
+  pc.textContent = pv + '%';
+  pc.style.color = pv >= 35 ? 'var(--red)' : pv >= 20 ? 'var(--amber)' : 'var(--text)';
+
+  const se = document.getElementById('stStatus');
+  se.textContent = (d.status||'—').toUpperCase();
+  se.style.color = d.status==='drowsy'?'var(--red)':d.status==='distracted'?'var(--blue)':d.status==='awake'?'var(--green)':'var(--muted)';
+
+  // Alert routing
+  const activeCount = [d.eye_alert, d.yawn_alert, d.nod_alert].filter(Boolean).length;
+  const multi = activeCount >= 2;
+
+  if (d.alert) {
+    let type='eye', msg='';
+    if (multi)                { type='multi'; msg='MULTIPLE ALERTS — STOP NOW'; }
+    else if (d.eye_alert)     { type='eye';   msg='EYES CLOSING — WAKE UP'; }
+    else if (d.yawn_alert)    { type='yawn';  msg='YAWNING — TAKE A BREAK'; }
+    else if (d.nod_alert)     { type='nod';   msg='HEAD DROOPING — PULL OVER'; }
+    else if (d.hand_alert)    { type='hand';  msg='HANDS OFF WHEEL — GRIP STEERING'; }
+    else if (d.distract_alert){ type='dist';  msg='EYES OFF ROAD — LOOK AHEAD'; }
+
+    setAlertBar(true, type, msg);
+    document.getElementById('screenFlash').classList.add('on');
+    startAlert(type);
+
+    logEntries.push({
+      time: new Date().toISOString(), type,
+      ear: d.ear, mar: d.mar, nod: d.nod_drop, yaw: d.yaw,
+      lang: currentLang,
+      conf_eye: d.ear_confidence, conf_yawn: d.mar_confidence,
+      conf_nod: d.nod_confidence, conf_hand: d.hand_confidence
+    });
+  } else if (isAlerting) {
+    stopAlert(); setAlertBar(false);
+    document.getElementById('screenFlash').classList.remove('on');
+  }
+}
+
+// RESET
+async function resetDetector() {
+  try { await fetch(`${SERVER}/reset`,{method:'POST'}); } catch(e){}
+  stopAlert(); setAlertBar(false); voiceCount=0; phraseIdx={};
+  document.getElementById('screenFlash').classList.remove('on');
+  document.getElementById('calOverlay').classList.remove('done');
+  if (stream) document.getElementById('calOverlay').style.display='flex';
+  ['stFrames','stAlerts','stVoice'].forEach(id=>document.getElementById(id).textContent='0');
+  document.getElementById('stBaseline').textContent='calibrating…';
+  document.getElementById('stBaseline').style.color='var(--muted)';
+  document.getElementById('stPerclos').textContent='—';
+  document.getElementById('stStatus').textContent='—';
+  document.getElementById('stStatus').style.color='var(--muted)';
+  ['indEyeC','indYawnC','indNodC','indDistC','indHandC'].forEach(id=>document.getElementById(id).textContent='0 alerts');
+  ['indEye','indYawn','indNod','indDist','indHand'].forEach(id=>document.getElementById(id).classList.remove('active'));
+  ['cntEye','cntYawn','cntNod','cntHand'].forEach(id=>{document.getElementById(id).textContent='0';document.getElementById(id).style.color='var(--text)';});
+  logEntries=[]; addLog('Detector reset','ok');
+}
+
+// HELPERS
+function setSig(id,on){document.getElementById(id).classList.toggle('on',!!on);}
+function setGauge(id,pct,danger,safeColor){const el=document.getElementById(id);el.style.width=pct+'%';el.style.background=danger?'var(--red)':(safeColor||'var(--green)');}
+function setGaugeVal(id,val,cls){const el=document.getElementById(id);el.textContent=val;el.className='gauge-val'+(cls?' '+cls:'');}
+function setCnt(id,val,thr){const el=document.getElementById(id);el.textContent=val;el.style.color=val/thr>=1?'var(--red)':val/thr>=.6?'var(--amber)':'var(--text)';}
+function setInd(id,active,cid,count){document.getElementById(id).classList.toggle('active',!!active);document.getElementById(cid).textContent=count+(count===1?' alert':' alerts');}
+function setConfPill(id, val) {
+  const el = document.getElementById(id);
+  const label = id.replace('conf','');
+  el.textContent = label + ' ' + val + '%';
+  el.className = 'conf-pill' + (val >= 80 ? ' danger' : val >= 50 ? ' warn' : '');
+}
+function setAlertBar(on,type,msg){
+  const bar=document.getElementById('alertBar'),lp=document.getElementById('langLivePill');
+  if(on){bar.className='alert-bar show '+type;document.getElementById('alertText').textContent=msg;lp.textContent=LANG_NAMES[currentLang];lp.style.display=alertMode==='voice'?'inline':'none';}
+  else{bar.className='alert-bar';lp.style.display='none';}
+}
+function startTimer(){sessionStart=Date.now();const el=document.getElementById('timer');el.classList.add('running');timerInterval=setInterval(()=>{const s=Math.floor((Date.now()-sessionStart)/1000);el.textContent=String(Math.floor(s/60)).padStart(2,'0')+':'+String(s%60).padStart(2,'0');},1000);}
+function addLog(msg,type){const w=document.getElementById('logWrap'),now=new Date().toLocaleTimeString('en-IN',{hour12:false}),e=document.createElement('div');e.className='log-entry '+(type||'');e.innerHTML=`<span class="log-time">${now}</span><span class="log-msg">${msg}</span>`;w.insertBefore(e,w.firstChild);while(w.children.length>150)w.removeChild(w.lastChild);}
+function exportCSV(){if(!logEntries.length){addLog('No alert data yet','warn');return;}const csv='time,type,ear,mar,nod_drop,yaw,language,conf_eye,conf_yawn,conf_nod,conf_hand\n'+logEntries.map(e=>`${e.time},${e.type},${e.ear||''},${e.mar||''},${e.nod||''},${e.yaw||''},${e.lang},${e.conf_eye||0},${e.conf_yawn||0},${e.conf_nod||0},${e.conf_hand||0}`).join('\n');const a=Object.assign(document.createElement('a'),{href:URL.createObjectURL(new Blob([csv],{type:'text/csv'})),download:`drowseguard_${new Date().toISOString().slice(0,10)}.csv`});a.click();addLog('CSV exported','ok');}
+</script>
+</body>
+</html>
