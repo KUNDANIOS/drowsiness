@@ -509,7 +509,7 @@ const LANG_BCP   = { hi:'hi-IN', en:'en-IN', kn:'kn-IN', te:'te-IN' };
 const LANG_NAMES = { hi:'हिन्दी', en:'EN', kn:'ಕನ್ನಡ', te:'తెలుగు' };
 
 // STATE
-const SERVER = 'https://drowsiness-production.up.railway.app';
+const SERVER = window.location.origin;
 const FPS    = 10;
 let stream=null, frameInterval=null, timerInterval=null, repeatTimer=null;
 let sessionStart=null, fpsCount=0, fpsLast=Date.now();
